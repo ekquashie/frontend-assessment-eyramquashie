@@ -120,3 +120,38 @@ The freeze happens the moment anyone opens the products table, in a 30 minute de
 Stays broken: the three forms still silently discard typed input on failure. Someone starting onboarding right after signing can hit that with no warning, mine to fix fast once demo pressure lifts.
 
 To the person who wanted forms fixed first: The form data getting wiped out after validation is a bad bug long-term but a freeze in a room with clients is worse which could lead to losing a deal before the client can even build trust. It's mainly about timing and not severity.
+
+## Q8 Answer
+
+**Conflict 1: Requirement 2 and 3 (Select All vs Confirmation List)**
+Cannot both be true: Assuming a user selects 10,000 products, the confirmation cannot display 10,000 SKUs in a dialog. That's too much and will either crash the browser and the UI might end up being unusable.
+
+Decision: I will keep requirement 2 and rather show list count in the dialog
+
+Ticket: "The confirmation will show a "Update 10,000 products?" with a summary instead of individual items.
+
+Business Question: "Is showing the count acceptable or do you need line items?"
+
+---
+
+**Conflict 2: Requirements 4 & 5 (API Batch Limit vs. Atomicity)**
+
+Cannot both be true: If user selects 2500 products and API caps at 500, you need 5 requests. If request 1-3 succeed and request 4 fails, you have partially updated data. This basically violates the "all or nothing" promise.
+
+Decision: Keep Requirement 5. Change Requirement 4.
+
+Ticket: "Backend must support atomic transactions across batches, or frontend must limit selection to 500."
+
+Business question: "Can your API guarantee atomicity across multiple requests, or should we cap user selection at 500?"
+
+---
+
+**Conflict 3: Requirements 5 & 6 (Atomicity vs. Partial Reporting)**
+
+Cannot both be true: If operation is atomic (all succeed or all fail), there's no scenario where some succeed and some fail. A toast saying "500 succeeded, 200 failed" is incompatible with atomicity.
+
+Decision: Keep Requirement 5. Change Requirement 6 to report only "Success: 2000 products updated" or "Failed: a rolled back operation, 0 products updated."
+
+Business question: "When you say you want 'successes and failures,' do you expect partial updates? Or should we treat it as all-or-nothing?"
+
+## Q9 Answer
