@@ -155,3 +155,12 @@ Decision: Keep Requirement 5. Change Requirement 6 to report only "Success: 2000
 Business question: "When you say you want 'successes and failures,' do you expect partial updates? Or should we treat it as all-or-nothing?"
 
 ## Q9 Answer
+
+
+## Q10 Answer
+
+
+## Q11 Answer
+Message to developer: I value your work and how fast you move and the quality of code you ship. 900-line PRs with no tests is a risk we can't take even under deadline pressure. Trying to figure things out or fix bugs when production crashes will take  a lot of time and resources to solve which is slower than splitting now. Splitting PRs now will save us 24 hours of debugging later. Going forward, 400 lines of code will need tests before review. Ansd I am not asking becuase it is how we operate. Could there be a reason why you can't test? Is there a blocker?
+
+Message to business owner: I know shipping faster is the goal but the untested code that was shipped is now in production. If there is a bug that needs to be fixed, we would spend a lot of time trying to fix that bug since no tests were done and it'll be difficult to locate the bug. We would also have to rebuild trust. Test might take a few hours to write but fixing those bugs could take double or triple the amount of time. Our fastest path forward is smaller, tested code. That's the standard here now.
