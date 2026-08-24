@@ -156,6 +156,10 @@ Business question: "When you say you want 'successes and failures,' do you expec
 
 ## Q9 Answer
 
+**Verdict: Request changes.**
+
+`clear()` does `window.location.href = '/products'`, which is a full page reload, that's a direct violation of AC-2, which explicitly requires clearing the filter to work without one. Whatever else is right about this diff, it fails an acceptance criterion outright, so this can't be an approve or an approve-with-comments. On top of that, the PR bundles in an unrelated controlled-component conversion and a date-helper extraction under "took the opportunity to," scope creep riding along with a bug fix, which is its own reason to send it back even before getting to the AC failure.
+
 ## Q10 Answer
 
 **Actions in Order (First 60 Minutes):**
