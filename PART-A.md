@@ -156,9 +156,43 @@ Business question: "When you say you want 'successes and failures,' do you expec
 
 ## Q9 Answer
 
-
 ## Q10 Answer
 
+**Actions in Order (First 60 Minutes):**
+
+**Minutes 0-10:** Stop. Don't panic. SSH into a CI/CD machine or local clone and run `git reflog`. Find the commit hash of the old HEAD before the force push. Note it down. Confirm production branch is untouched.
+
+**Minutes 10-20:** Recover the development branch. Force push the old HEAD back to dev: `git push -f origin HEAD~11`. This restores the 11 commits. Verify the PR branches still exist on developers' local machines (they do—only the remote was wiped).
+
+**Minutes 20-30:** Message the two blocked developers immediately: "Dev branch was accidentally rewound. It's fixed now—pull the latest. If your PR branches disappeared from GitHub, they're still on your machine. Run `git branch -a` and push them back."
+
+**Minutes 30-40:** Interview the developer whose IDE synced. Get specifics: which IDE, what settings, what did they click. Was it VSCode's git sync? GitKraken? Something else?
+
+**Minutes 40-60:** Document what happened. Verify all four PRs are back on remote.
+
+---
+
+**What You Tell the Blocked Developers:**
+
+At minute 10: "Dev branch got force-pushed accidentally. I've recovered it and pushed it back. Pull now. If your PR branches aren't showing on GitHub, they're still local—just push them."
+
+---
+
+**What You Tell the Business Owner:**
+
+At minute 60 (after resolution): "The development branch was accidentally force-pushed this morning by an IDE automation. We recovered it within an hour. No impact to production or shipping. We're implementing branch protection to prevent this happening again."
+
+You do NOT tell them before it's resolved. It's noise until it's fixed, and production is safe.
+
+---
+
+**What Changes Permanently:**
+
+**Require:** Branch protection rules on the development branch. Only allow direct pushes from one release branch or explicitly protected accounts. Force push is disabled. All changes go through PRs.
+
+**Who agrees:** Tech lead + engineering manager. You don't ask the business owner—this is a control.
+
+**Secondary change:** Audit which IDEs or tools developers use for git. If VSCode is auto-syncing in dangerous ways, document the safe settings and send them to the team.
 
 ## Q11 Answer
 Message to developer: I value your work and how fast you move and the quality of code you ship. 900-line PRs with no tests is a risk we can't take even under deadline pressure. Trying to figure things out or fix bugs when production crashes will take  a lot of time and resources to solve which is slower than splitting now. Splitting PRs now will save us 24 hours of debugging later. Going forward, 400 lines of code will need tests before review. Ansd I am not asking becuase it is how we operate. Could there be a reason why you can't test? Is there a blocker?
@@ -181,3 +215,14 @@ Roughly 3 days before monitoring caught the pattern and escalated.
 I stopped assuming "it's just a search input" is safe. Now any input field that triggers a network request is a performance risk until proven otherwise. Before shipping input handlers that call APIs, I ask myself: is this debounced, could a fast typer hammer the backend? I also started checking backend metrics during launches myself, watching the Network tab, rather than waiting for monitoring to flag it.
 
 ## Q13 Answer
+### Waste Management Admin Dashboard — waste-ms-admin
+
+Internal admin tool for waste collection orgs: manages customers, collection schedules, invoicing, payments, areas, and staff roles/permissions. Used daily by org admins and dispatch staff. I built and deployed both ends solo, Spring Boot backend, Next.js frontend, so there was no formal contract negotiation, just fast iteration between API and UI. The hardest part was reconciling recurring collection schedules (day/week/month cadences) with real calendar dates and billing periods without drifting out of sync.
+
+### WhatPay - Trading platform for Buyers and Suppliers
+
+A dashboard widget for buyers/suppliers on a trade-escrow platform, surfacing what needs action: pending KYB verification, missing payout destinations, orders awaiting confirmation, open disputes, and failed payouts. Used by every merchant on login.
+
+I built and deployed both the Next.js frontend and the Spring Boot backend/API myself, so the "contract" was just internal consistency between the two as I built.
+
+Hardest part: coordinating 7 independent, conditionally-enabled queries (gated by verification/role state) into one coherent loading/error/empty state, without showing a false "all caught up" while data was still loading or partially failed.
