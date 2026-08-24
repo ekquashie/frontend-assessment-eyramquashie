@@ -94,15 +94,15 @@ function assertUnreachable(code: never, handlers: ErrorHandlers): void {
 }
 ```
 
-Each consumer calls `handleApiError(response.error, { onField, onToast })`, passing only the callbacks it needs. The poll passes `{}`, so nothing fires, staying silent by construction rather than by remembering to suppress anything.
+Each consumer just calls `handleApiError(response.error, { onField, onToast })` with whatever callbacks it actually has. The poll passes `{}`, so it's silent because there's nothing to call, not because someone remembered to suppress an error somewhere.
 
-1. `data` is non-null on success because the type is a discriminated union on `error`, not a cast: TypeScript narrows `data: T` once you check `error === null`, so no assertion is needed, the compiler proves it.
+For question 1, `data` ends up non-null without a cast because the union is discriminated on `error`. Once you check `error === null` TypeScript narrows `data` to `T` on its own, the compiler already knows it can't be null in that branch.
 
-2. Adding a new `ErrorCode` breaks the `switch`'s `default` branch, since `assertUnreachable` requires `never`, an unhandled code no longer satisfies that parameter and the build fails.
+For question 2, adding a new `ErrorCode` breaks the build because the `switch`'s `default` calls `assertUnreachable(error.code, ...)`, and that function's parameter type is `never`. An unhandled code stops satisfying `never`, so it won't compile until someone adds a case for it.
 
-3. Point 2 is a compile-time guarantee for known codes; point 3 is different, a code the frontend has never seen still satisfies the `default` case's runtime fallthrough, so `assertUnreachable` still fires and still calls `onToast`, so the user sees a generic message instead of silence, even though `never` is technically violated by real data.
+Question 3 is a different problem than question 2 even though they sound similar. Point 2 is what happens at compile time for codes we already know about. Point 3 is about a code arriving at runtime that we've genuinely never seen, deployed ahead of the frontend. TypeScript can't stop that, but the `default` branch still runs at runtime regardless of what the type system thinks, so `assertUnreachable` still fires and still shows a toast. The user gets a generic message instead of nothing, even though technically that value violated `never`.
 
-4. If `field` doesn't match a real input name, `onField` fires with a name the form doesn't recognize, and the message never attaches to anything visible, silently dropped. That's fixed inside the form's `onField` implementation, falling back to a toast when the field name isn't registered, not by every consumer re-deriving that logic.
+Question 4, if `field` doesn't match a real input name, `onField` gets called with a name nothing recognizes, so the message just never attaches to anything and silently disappears. That gets fixed inside the form's own `onField`, falling back to a toast if the field isn't registered, not by pushing that logic onto every consumer.
 
 ## Q6 Answer
 I will reject it.
@@ -160,43 +160,43 @@ Business question: "When you say you want 'successes and failures,' do you expec
 
 `clear()` does `window.location.href = '/products'`, which is a full page reload, that's a direct violation of AC-2, which explicitly requires clearing the filter to work without one. Whatever else is right about this diff, it fails an acceptance criterion outright, so this can't be an approve or an approve-with-comments. On top of that, the PR bundles in an unrelated controlled-component conversion and a date-helper extraction under "took the opportunity to," scope creep riding along with a bug fix, which is its own reason to send it back even before getting to the AC failure.
 
+**Comments, most important first:**
+
+1. `FilterBar.tsx` - `clear()` uses `window.location.href = '/products'` instead of resetting state through `onChange`. That's a full reload, not what AC-2 asks for. Reset `suppliers` and call `onChange` like `apply` does.
+
+2. `FilterBar.tsx` - the Add button pushes `draft` into `suppliers` but never resets `draft` afterward, so the input still shows the last thing you typed instead of clearing for the next supplier.
+
+3. `useProducts.ts` - `refetchOnMountOrArgChange: true` isn't asked for by either AC and changes fetch behavior for every consumer of this hook, not just the filter bar. Either justify it or pull it into its own PR.
+
+4. `lib/date.ts` - moving `formatDate` here is fine on its own but it's unrelated to this ticket, the PR description says as much ("took the opportunity to"). Split it out.
+
+5. No way to remove a single supplier once added, only clear all. Not a blocker, but worth a comment since AC-1 says "accept multiple suppliers," implying you'd want to manage them individually.
+
+**What I didn't comment on:** the typo risk in comparing suppliers by raw string in `apply` (no trim/case handling) - not flagging it since the ticket doesn't mention validation and I'd rather not review scope that wasn't asked for.
+
+**Acceptance criteria:**
+
+AC-1 (multiple suppliers) - met. The `suppliers` array and the Add button support selecting more than one before applying.
+
+AC-2 (clear without full reload) - not met. `clear()` does a full `window.location.href` reload, which is exactly what this AC rules out.
+
 ## Q10 Answer
 
-**Actions in Order (First 60 Minutes):**
+First thing I'd do is not panic and go straight to `git reflog` on a CI machine or my own local clone to find the commit hash of the old HEAD before the force push happened. Once I have that noted down I'd confirm production is untouched, since that's the actual emergency check.
 
-**Minutes 0-10:** Stop. Don't panic. SSH into a CI/CD machine or local clone and run `git reflog`. Find the commit hash of the old HEAD before the force push. Note it down. Confirm production branch is untouched.
+By around the 10-20 minute mark I'd recover the branch itself, force pushing the old HEAD back: `git push -f origin HEAD~11`. That gets the 11 commits back. The PR branches should still be fine on the two developers' machines too, only the remote copies got wiped, so nothing is actually lost yet.
 
-**Minutes 10-20:** Recover the development branch. Force push the old HEAD back to dev: `git push -f origin HEAD~11`. This restores the 11 commits. Verify the PR branches still exist on developers' local machines (they do—only the remote was wiped).
+Around 20-30 minutes I'd message the two blocked developers directly: dev branch got accidentally rewound, it's fixed now, pull the latest, and if their PR branches vanished from GitHub they're still local, just push them back up.
 
-**Minutes 20-30:** Message the two blocked developers immediately: "Dev branch was accidentally rewound. It's fixed now—pull the latest. If your PR branches disappeared from GitHub, they're still on your machine. Run `git branch -a` and push them back."
+30-40 minutes I'd go talk to whoever's IDE did this. Not to blame them, just to get the actual details, which IDE, what setting, what did they click, was it VSCode's git sync or something like GitKraken doing something unexpected.
 
-**Minutes 30-40:** Interview the developer whose IDE synced. Get specifics: which IDE, what settings, what did they click. Was it VSCode's git sync? GitKraken? Something else?
+Last 20 minutes or so, write down what happened and confirm all four PRs are actually back on the remote before calling it resolved.
 
-**Minutes 40-60:** Document what happened. Verify all four PRs are back on remote.
+For the two blocked developers, I'd tell them as soon as it's fixed, not before, since telling them mid-recovery just adds noise while I'm working. Something like: branch got force-pushed accidentally, I've recovered it, pull now, and if your PR branch isn't showing on GitHub it's still on your machine, just push it.
 
----
+For the business owner, I wouldn't say anything until it's resolved. Production wasn't affected and it was fixed within the hour, so there's nothing actionable for them to do by hearing about it mid-incident, it would just be alarming for no reason. Once it's done: dev branch got accidentally force-pushed this morning by an IDE syncing in a way it shouldn't have, we recovered it within an hour, no impact to production or shipping, and we're putting branch protection in place so this can't happen again.
 
-**What You Tell the Blocked Developers:**
-
-At minute 10: "Dev branch got force-pushed accidentally. I've recovered it and pushed it back. Pull now. If your PR branches aren't showing on GitHub, they're still local—just push them."
-
----
-
-**What You Tell the Business Owner:**
-
-At minute 60 (after resolution): "The development branch was accidentally force-pushed this morning by an IDE automation. We recovered it within an hour. No impact to production or shipping. We're implementing branch protection to prevent this happening again."
-
-You do NOT tell them before it's resolved. It's noise until it's fixed, and production is safe.
-
----
-
-**What Changes Permanently:**
-
-**Require:** Branch protection rules on the development branch. Only allow direct pushes from one release branch or explicitly protected accounts. Force push is disabled. All changes go through PRs.
-
-**Who agrees:** Tech lead + engineering manager. You don't ask the business owner—this is a control.
-
-**Secondary change:** Audit which IDEs or tools developers use for git. If VSCode is auto-syncing in dangerous ways, document the safe settings and send them to the team.
+What actually changes permanently is branch protection on the development branch, no more direct force pushes, everything through PRs. That's a decision for the tech lead and engineering manager to sign off on, not something you'd bring to the business owner since it's an engineering control, not a business tradeoff. I'd also want to know what IDE setting caused this in the first place and get that documented so it doesn't quietly happen to someone else.
 
 ## Q11 Answer
 Message to developer: I value your work and how fast you move and the quality of code you ship. 900-line PRs with no tests is a risk we can't take even under deadline pressure. Trying to figure things out or fix bugs when production crashes will take  a lot of time and resources to solve which is slower than splitting now. Splitting PRs now will save us 24 hours of debugging later. Going forward, 400 lines of code will need tests before review. Ansd I am not asking becuase it is how we operate. Could there be a reason why you can't test? Is there a blocker?
