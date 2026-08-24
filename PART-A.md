@@ -5,9 +5,9 @@ Senior Frontend Developer
 
 React.memo does a shallow comparison, not deep, that part's wrong. But the rest of the diagnosis holds: a `columns` array rebuilt every render is a new reference even with identical contents, so it correctly fails shallow comparison. memo isn't broken, it's doing its job. The bug is upstream.
 
-useMemo alone won't fix it. It only skips recomputation when its dependencies are stable, and if the parent re-renders every keystroke, those dependencies get recreated too. Fix the parent's re-render frequency instead, move the input's state out, or memoize the parent so its outputs stay stable.
+useMemo alone won't fix it. It only skips recomputation when its dependencies are stable, and if the parent re-renders every keystroke, those dependencies get recreated too. Fix the parent's re-render frequency instead, move the input's state out, or memoise the parent so its outputs stay stable.
 
-Two other ways to defeat memo here: inline arrow functions as props (`onClick={() => handleDelete(id)}`), and inline object/array literals (`style={{ color: 'blue' }}`), both new references every render.
+Two other ways to defeat memo here: inline arrow functions as props (`onClick={() => handleDelete(id)}`), and inline object/array literals (`style={{ colour: 'blue' }}`), both new references every render.
 
 Root cause: the parent re-renders on every keystroke, rebuilding `columns` each time, and memo correctly re-renders ProductRow in response.
 
@@ -21,7 +21,7 @@ Root cause: the parent re-renders on every keystroke, rebuilding `columns` each 
 
 3. The try block itself is empty, so structurally this whole thing does nothing until the catch block runs, and per point 1, the catch block never runs on the success path either. It's dead code shaped like error handling.
 
-**The false comment:** `// ignore - the invalidation will refetch anyway` isn't true given how the code is actually written. That comment is only accurate if the catch block reliably runs and does the rollback work, but because `await queryFulfilled` is in the wrong branch, there's no real safety net backing that comment up. It reads as reassuring but describes behavior the code doesn't have.
+**The false comment:** `// ignore - the invalidation will refetch anyway` isn't true given how the code is actually written. That comment is only accurate if the catch block reliably runs and does the rollback work, but because `await queryFulfilled` is in the wrong branch, there's no real safety net backing that comment up. It reads as reassuring but describes behaviour the code doesn't have.
 
 **Not actually a bug:** using one shared `'Product'` tag instead of per-id tags looks sloppy at first glance, but for a table this size it's a reasonable tradeoff. It just means one status update invalidates the whole list rather than a single row, which costs an extra refetch but guarantees every view of the data, filtered or not, eventually converges to the truth. I wouldn't flag this as a defect.
 
@@ -42,7 +42,7 @@ export const SupplierBadge = memo(function SupplierBadge({
 });
 ```
 
-I removed the `useSupplierName` hook and its local `name` state, reading `data.name` straight from the query. That hook's effect only set `name` when `data?.name` was truthy, it never cleared it back out. So if this component gets reused for a different `supplierId`, say on a re-sort or virtualization recycling, the old name stays on screen until the new query resolves. That's the actual bug: one row briefly shows another supplier's name. Reading straight from `data` kills that stale window since there's no local state left to go stale.
+I removed the `useSupplierName` hook and its local `name` state, reading `data.name` straight from the query. That hook's effect only set `name` when `data?.name` was truthy, it never cleared it back out. So if this component gets reused for a different `supplierId`, say on a re-sort or virtualisation recycling, the old name stays on screen until the new query resolves. That's the actual bug: one row briefly shows another supplier's name. Reading straight from `data` kills that stale window since there's no local state left to go stale.
 
 I also dropped the useMemo around `.toUpperCase()`, it cost more than the string transform it wrapped.
 
@@ -105,9 +105,18 @@ Each consumer calls `handleApiError(response.error, { onField, onToast })`, pass
 4. If `field` doesn't match a real input name, `onField` fires with a name the form doesn't recognize, and the message never attaches to anything visible, silently dropped. That's fixed inside the form's `onField` implementation, falling back to a toast when the field name isn't registered, not by every consumer re-deriving that logic.
 
 ## Q6 Answer
+I will reject it.
 
-Reject it.
+Virtualisation keeps only the rows near the current scroll position in the DOM, everything else is unmounted. Two things break, both for the warehouse floor worker specifically: Ctrl-F only matches text actually in the DOM, so an order number that's scrolled out of view won't be found even though it's in the filtered list. Ctrl-P prints whatever the browser currently has rendered, not the full dataset, so the sheet that ends up on the clipboard is missing most of the orders. That's not degraded UX, it's a wrong physical document driving warehouse decisions.
 
-Virtualization keeps only the rows near the current scroll position in the DOM, everything else is unmounted. Two things break, both for the warehouse floor worker specifically: Ctrl-F only matches text actually in the DOM, so an order number that's scrolled out of view won't be found even though it's in the filtered list. Ctrl-P prints whatever the browser currently has rendered, not the full dataset, so the sheet that ends up on the clipboard is missing most of the orders. That's not degraded UX, it's a wrong physical document driving warehouse decisions.
+Instead I'd leave the DOM full and attack the six seconds directly: virtualise nothing, but cut what's actually slow, paginate or lazy-load the initial fetch so first paint isn't waiting on all 3,000 rows, memoise row rendering properly, and move any per-row computation out of render. If the list itself must stay client-side complete for print and find, the cost of that approach is real, you're still shipping and rendering all 3,000 rows eventually, so the win is bounded to how much of the six seconds was wasted work rather than unavoidable rendering, and it takes more profiling than dropping in a virtualiser.
 
-Instead I'd leave the DOM full and attack the six seconds directly: virtualize nothing, but cut what's actually slow, paginate or lazy-load the initial fetch so first paint isn't waiting on all 3,000 rows, memoize row rendering properly, and move any per-row computation out of render. If the list itself must stay client-side complete for print and find, the cost of that approach is real, you're still shipping and rendering all 3,000 rows eventually, so the win is bounded to how much of the six seconds was wasted work rather than unavoidable rendering, and it takes more profiling than dropping in a virtualizer.
+## Q7 Answer
+
+I'd virtualise the table.
+
+The freeze happens the moment anyone opens the products table, in a 30 minute demo, the supplier will see the app as broken because not being able to do anything for 4 seconds will look weird. The form bug only appears on a validation failure which is unlikely. Shouldn't be a big issue during the demo.
+
+Stays broken: the three forms still silently discard typed input on failure. Someone starting onboarding right after signing can hit that with no warning, mine to fix fast once demo pressure lifts.
+
+To the person who wanted forms fixed first: The form data getting wiped out after validation is a bad bug long-term but a freeze in a room with clients is worse which could lead to losing a deal before the client can even build trust. It's mainly about timing and not severity.
