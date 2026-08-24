@@ -5,16 +5,16 @@ Senior Frontend Developer
 
 **Factually Wrong Parts:**
 
-Firstly, React.memo does not do a deep comparison. This is the critical error. The columns array rebuilding on every render is expected to happen. The main purpose of the error getting caught early is due to shallow comparison.
+React.memo does shallow comparisons not deep. The developer is correct that a rebuilt columns array fails shallow comparison, but that's the point—shallow comparison catches.
 
 **Will useMemo Fix It?**
 
-It depends. If we wrap columns in useMemo inside the parent, it could help, but only if the parent doesn't also rebuild on every keystroke. This will affect the dependency array as well and will return a new arrya every time. For the fix to work, the parent must be memoized with useCallback.
+No. Wrapping columns in useMemo helps only if the parent stops rebuilding on every keystroke. If the parent re-renders, the dependency array changes and useMemo returns a new array anyway. The fix requires the parent to be memoized with useCallback or to not rebuild columns at all.
 
 **Two Other Things That Defeat React.memo:**
+1. Passing inline functions as props as props: `onClick={() => handleDelete(id)}`
 
-1. Inline functions passed as props: `onClick={() => handleDelete(id)}` - creates a new function every render
-2. Object literals passed as props: `style={{ color: blue }}` or `className={{ active: true }}` - new object reference every render
+2. Passing object literals as props: `style={{ color: blue }}` or `className={{ active: true }}`
 
 **Actual Cause:**
-The parent component re-renders on every search keystroke, and shallow comparison sees the new columns array reference, so memo allows ProductRow to re-render even though the row's data hasn't changed.
+The parent re-renders on every keystroke, so shallow comparison always sees a new columns reference and allows ProductRow to re-render.
