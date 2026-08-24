@@ -223,6 +223,6 @@ Internal admin tool for waste collection orgs: manages customers, collection sch
 
 A dashboard widget for buyers/suppliers on a trade-escrow platform, surfacing what needs action: pending KYB verification, missing payout destinations, orders awaiting confirmation, open disputes, and failed payouts. Used by every merchant on login.
 
-I built and deployed both the Next.js frontend and the Spring Boot backend/API myself, so the "contract" was just internal consistency between the two as I built.
+I built and deployed both the Next.js frontend and the Spring Boot backend/API myself, so the contract was just internal consistency between the two as I built.
 
 Hardest part: coordinating 7 independent, conditionally-enabled queries (gated by verification/role state) into one coherent loading/error/empty state, without showing a false "all caught up" while data was still loading or partially failed.

@@ -1,0 +1,4 @@
+rows mounted: 5000
+total render calls before keystroke: 10000
+total render calls after keystroke: 10000
+rows that re-rendered from this keystroke: 0
