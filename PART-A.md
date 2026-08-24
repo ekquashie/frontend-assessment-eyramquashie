@@ -47,3 +47,67 @@ I removed the `useSupplierName` hook and its local `name` state, reading `data.n
 I also dropped the useMemo around `.toUpperCase()`, it cost more than the string transform it wrapped.
 
 Not fixed here: at 200 rows that's 200 separate `useGetSupplierQuery` calls, real request volume hitting the API. memo stops re-renders, not that. The fix belongs at the data-fetching layer, batch the supplier ids into one request instead of resolving per row.
+
+## Q4 Answer
+
+**Values painted:** `idle`, then `saving`, then `idle`.
+
+Click fires, `setLabel('saving')` paints before the await. After the 400ms await resolves, `setLabel('saved')` and `setLabel(label === 'saving' ? 'done' : label)` both run synchronously, no await between them, so React 18 batches them and only the last result paints.
+
+**Why `saved` and `done` never show:** `label` in `onClick` is captured from the render that created the closure, before this click's updates committed, so it's still `'idle'`. `label === 'saving'` is false, so the ternary returns `label`, i.e. `'idle'`. That overwrites the `setLabel('saved')` right before it, and since both are in the same batch, only `'idle'` paints. `saved` is assigned but never rendered; `done` is unreachable since the condition is always false against a stale closure.
+
+**Final state:** the button reads `idle`, same as before the click. No confirmation, no error, nothing visibly changed despite the mutation succeeding.
+
+**Fix:** delete the last line. `setLabel('saved')` in the try block is already the correct terminal state; that extra line is the only thing breaking it.
+
+## Q5 Answer
+
+```ts
+type ApiError = { code: ErrorCode; message: string; field?: string };
+
+type ErrorHandlers = {
+  onField?: (field: string, message: string) => void;
+  onToast?: (message: string) => void;
+  onSilent?: (error: ApiError) => void;
+};
+
+function handleApiError(error: ApiError, handlers: ErrorHandlers): void {
+  switch (error.code) {
+    case 'VALIDATION_FAILED':
+      error.field && handlers.onField
+        ? handlers.onField(error.field, error.message)
+        : handlers.onToast?.(error.message);
+      return;
+    case 'SUPPLIER_LOCKED':
+    case 'STOCK_NEGATIVE':
+    case 'IMPORT_IN_PROGRESS':
+    case 'RATE_LIMITED':
+      handlers.onToast?.(error.message);
+      return;
+    default:
+      assertUnreachable(error.code, handlers);
+  }
+}
+
+function assertUnreachable(code: never, handlers: ErrorHandlers): void {
+  handlers.onToast?.('Something went wrong.');
+}
+```
+
+Each consumer calls `handleApiError(response.error, { onField, onToast })`, passing only the callbacks it needs. The poll passes `{}`, so nothing fires, staying silent by construction rather than by remembering to suppress anything.
+
+1. `data` is non-null on success because the type is a discriminated union on `error`, not a cast: TypeScript narrows `data: T` once you check `error === null`, so no assertion is needed, the compiler proves it.
+
+2. Adding a new `ErrorCode` breaks the `switch`'s `default` branch, since `assertUnreachable` requires `never`, an unhandled code no longer satisfies that parameter and the build fails.
+
+3. Point 2 is a compile-time guarantee for known codes; point 3 is different, a code the frontend has never seen still satisfies the `default` case's runtime fallthrough, so `assertUnreachable` still fires and still calls `onToast`, so the user sees a generic message instead of silence, even though `never` is technically violated by real data.
+
+4. If `field` doesn't match a real input name, `onField` fires with a name the form doesn't recognize, and the message never attaches to anything visible, silently dropped. That's fixed inside the form's `onField` implementation, falling back to a toast when the field name isn't registered, not by every consumer re-deriving that logic.
+
+## Q6 Answer
+
+Reject it.
+
+Virtualization keeps only the rows near the current scroll position in the DOM, everything else is unmounted. Two things break, both for the warehouse floor worker specifically: Ctrl-F only matches text actually in the DOM, so an order number that's scrolled out of view won't be found even though it's in the filtered list. Ctrl-P prints whatever the browser currently has rendered, not the full dataset, so the sheet that ends up on the clipboard is missing most of the orders. That's not degraded UX, it's a wrong physical document driving warehouse decisions.
+
+Instead I'd leave the DOM full and attack the six seconds directly: virtualize nothing, but cut what's actually slow, paginate or lazy-load the initial fetch so first paint isn't waiting on all 3,000 rows, memoize row rendering properly, and move any per-row computation out of render. If the list itself must stay client-side complete for print and find, the cost of that approach is real, you're still shipping and rendering all 3,000 rows eventually, so the win is bounded to how much of the six seconds was wasted work rather than unavoidable rendering, and it takes more profiling than dropping in a virtualizer.
